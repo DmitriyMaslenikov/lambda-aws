@@ -1,0 +1,16 @@
+org: dmitriymaslenikov
+app: aws-node-http-api
+service: hello
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+
+functions:
+  hello:
+    handler: dist/index.hello
+    events:
+      - httpApi:
+          path: /
+          method: get
