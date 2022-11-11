@@ -1,16 +1,118 @@
 org: dmitriymaslenikov
 app: aws-node-http-api
-service: hello
+service: studyingServerless2
 frameworkVersion: '3'
-
+custom:
+  BucketName: 'fileclientstorage2'
+  UserPoolName: 'clientUserPool2'
 provider:
   name: aws
   runtime: nodejs14.x
+  region: eu-central-1
 
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: 's3:ListBucket'
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - 's3:GetObject'
+            - 's3:PutObject'
+            - 's3:DeleteObject'
+          Resource: !Sub
+            - '${ResourceName}/*'
+            - ResourceName: !GetAtt S3TranscriptionBucket.Arn
+
+        - Effect: Allow
+          Action: 'cognito-idp:AdminConfirmSignUp'
+          Resource: '*'
+
+  httpApi:
+    authorizers:
+      jwtAuthorizer:
+        type: jwt
+        identitySource: $request.header.Authorization
+        issuerUrl: !Sub
+          - 'https://cognito-idp.${aws:region}.amazonaws.com/${CognitoUserPool}'
+          - CognitoUserPool: !Ref CognitoUserPool
+        audience:
+          - !Ref UserPoolClient
 functions:
   hello:
-    handler: dist/index.hello
+    handler: dist/indexNew.hello
     events:
       - httpApi:
           path: /
           method: get
+
+  putObject:
+    handler: dist/indexNew.putObject
+    events:
+      - httpApi:
+          path: /putObject
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+    environment: { BucketName: !Ref S3TranscriptionBucket }
+
+  files:
+    handler: dist/indexNew.files
+    events:
+      - httpApi:
+          path: /files
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+    environment: { BucketName: !Ref S3TranscriptionBucket }
+
+  delete:
+    handler: dist/indexNew.deleteFile
+    events:
+      - httpApi:
+          path: /delete
+          method: delete
+          authorizer:
+            name: jwtAuthorizer
+    environment: { BucketName: !Ref S3TranscriptionBucket }
+
+  signUp:
+    handler: dist/indexNew.signUp
+    events:
+      - httpApi:
+          path: /sign_up
+          method: post
+    environment:
+      { userPoolId: !Ref CognitoUserPool, clientId: !Ref UserPoolClient }
+
+  authUser:
+    handler: dist/indexNew.authUser
+    events:
+      - httpApi:
+          path: /auth
+          method: post
+    environment: { clientId: !Ref UserPoolClient }
+
+resources:
+  Resources:
+    S3TranscriptionBucket:
+      Type: 'AWS::S3::Bucket'
+      Properties:
+        BucketName: '${self:custom.BucketName}'
+    CognitoUserPool:
+      Type: 'AWS::Cognito::UserPool'
+      Properties:
+        UserPoolName: '${self:custom.UserPoolName}'
+        MfaConfiguration: 'OFF'
+        UsernameAttributes:
+          - email
+
+    UserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: 'ClientUserPool'
+        UserPoolId: !Ref CognitoUserPool
+        ExplicitAuthFlows:
+          - 'ALLOW_USER_PASSWORD_AUTH'
+          - 'ALLOW_REFRESH_TOKEN_AUTH'
